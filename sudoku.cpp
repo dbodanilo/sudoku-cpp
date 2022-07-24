@@ -7,9 +7,30 @@
 #include<string>
 #include<vector>
 
+#define CHARSET_ONE2NINE std::set<char>{'1', '2', '3', '4', '5', '6', '7', '8', '9'}
+
 bool isCharInString(char x, std::string cs) {
   return std::any_of(cs.begin(), cs.end(), 
                      [&x](char c) -> bool { return c == x; });
+}
+
+template<class a> 
+bool isVectorSet(std::vector<a> xs, a ignore) {
+  std::set<a> seen;
+
+  for (a x : xs) {
+    if (x == ignore || seen.count(x) == 0) seen.insert(x);
+    else return false;
+  }
+
+  return true;
+}
+
+template<class a> 
+void copySet(std::set<a>* xs, std::set<a> const& ys) {
+  xs->clear();
+
+  for (a y : ys) xs->insert(y);
 }
 
 template<class a>
@@ -132,6 +153,10 @@ vector<char> rowFromLine(std::string line) {
   return row;
 }
 
+void printBoard(matrix<char> const& board);
+
+bool validateBoard(matrix<char> const& board);
+
 matrix<char> readBoard() {
   matrix<char> board;
 
@@ -170,6 +195,14 @@ bool isComplete(vector<char> const& cs) {
   return true;
 }
 
+bool isComplete(matrix<char> const& board) {
+  for (vector<char> const& row : board) {
+    if (!isComplete(row)) return false;
+  }
+
+  return true;
+}
+
 std::map<size_t, std::set<char>*> mapFromRow(map2d<size_t, std::set<char>*> const& allowed, int rownum) {
   std::map<size_t, std::set<char>*> m = allowed.at(rownum);
 
@@ -182,14 +215,14 @@ vector<char> vectorFromRow(matrix<char> const& board, int rownum) {
   return cs;
 }
 
-void rowFromVector(matrix<char>& board, vector<char> row, int rownum) { 
+void rowFromVector(matrix<char>& board, vector<char> const& row, int rownum) { 
   board[rownum] = row;
 }
 
 std::map<size_t, std::set<char>*> mapFromCol(map2d<size_t, std::set<char>*> const& allowed, int colnum) {
   std::map<size_t, std::set<char>*> m;
 
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < 9; i += 1) {
     if (allowed.count(i) > 0) {
       std::map<size_t, std::set<char>*> row = mapFromRow(allowed, i);
       if (row.count(colnum) > 0) {
@@ -203,7 +236,7 @@ std::map<size_t, std::set<char>*> mapFromCol(map2d<size_t, std::set<char>*> cons
 
 vector<char> vectorFromCol(matrix<char> const& board, int colnum) {
   vector<char> cs;
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < 9; i += 1) {
     cs.push_back(board[i][colnum]);
   }
 
@@ -215,18 +248,23 @@ void colFromVector(matrix<char>& board, vector<char> col, int colnum) {
     board[row][colnum] = col[row];
 }
 
+std::pair<size_t, size_t> coordsFromBlockNum(size_t blocknum) {
+  // {i, j}: coords
+  return std::pair<size_t, size_t>{blocknum / 3, blocknum % 3};
+}
+
 std::map<size_t, std::set<char>*> mapFromBlock(map2d<size_t, std::set<char>*> const& allowed, 
-    int yBlock, int xBlock) {
+    size_t yBlock, size_t xBlock) {
   std::map<size_t, std::set<char>*> m;
 
-  int yMin = yBlock * 3, yMax = (yBlock + 1) * 3;
-  int xMin = xBlock * 3, xMax = (xBlock + 1) * 3;
+  size_t yMin = yBlock * 3, yMax = (yBlock + 1) * 3;
+  size_t xMin = xBlock * 3, xMax = (xBlock + 1) * 3;
 
-  int k = 0;
-  for (int i = yMin; i < yMax; i += 1) {
+  size_t k = 0;
+  for (size_t i = yMin; i < yMax; i += 1) {
     if (allowed.count(i) > 0) {
       std::map<size_t, std::set<char>*> row = mapFromRow(allowed, i);
-      for (int j = xMin; j < xMax; j += 1) {
+      for (size_t j = xMin; j < xMax; j += 1) {
         if (row.count(j) > 0) {
           m[k] = row[j];
         }
@@ -241,11 +279,10 @@ std::map<size_t, std::set<char>*> mapFromBlock(map2d<size_t, std::set<char>*> co
 }
 
 std::map<size_t, std::set<char>*> mapFromBlock(map2d<size_t, std::set<char>*> const& allowed, 
-    int blocknum) {
-  int yBlock = blocknum / 3;
-  int xBlock = blocknum % 3;
+    size_t blocknum) {
+  std::pair<size_t, size_t> blockCoords = coordsFromBlockNum(blocknum);
 
-  return mapFromBlock(allowed, yBlock, xBlock);
+  return mapFromBlock(allowed, blockCoords.first, blockCoords.second);
 }
 
 std::vector<char> vectorFromBlock(matrix<char> const& board, 
@@ -265,25 +302,28 @@ std::vector<char> vectorFromBlock(matrix<char> const& board,
 }
 
 std::vector<char> vectorFromBlock(matrix<char> const& board, int blocknum) {
-  int yBlock = blocknum / 3;
-  int xBlock = blocknum % 3;
+  std::pair<size_t, size_t> blockCoords = coordsFromBlockNum(blocknum);
 
-  return vectorFromBlock(board, yBlock, xBlock);
+  return vectorFromBlock(board, blockCoords.first, blockCoords.second);
 }
 
-void blockFromVector(matrix<char>& board, vector<char> block, int i) {
-  int yBlock = i / 3;
-  int xBlock = i % 3;
+void blockFromVector(matrix<char>& board, vector<char> block, size_t yBlock, size_t xBlock) {
+  size_t yMin = yBlock * 3, yMax = (yBlock + 1) * 3;
+  size_t xMin = xBlock * 3, xMax = (xBlock + 1) * 3;
 
-  int yMin = yBlock * 3, yMax = (yBlock + 1) * 3;
-  int xMin = xBlock * 3, xMax = (xBlock + 1) * 3;
-
-  int k = 0;
-  for (int i = yMin; i < yMax; i += 1) {
-    for (int j = xMin; j < xMax; j += 1) {
-      board[i][j] = block[k++];
+  size_t k = 0;
+  for (size_t i = yMin; i < yMax; i += 1) {
+    for (size_t j = xMin; j < xMax; j += 1) {
+      board[i][j] = block[k];
+      k += 1;
     }
   }
+}
+
+void blockFromVector(matrix<char>& board, vector<char> block, size_t blocknum) {
+  std::pair<size_t, size_t> blockCoords = coordsFromBlockNum(blocknum);
+
+ return blockFromVector(board, block, blockCoords.first, blockCoords.second);
 }
 
 std::set<char> notInVector(std::set<char> const& initial, std::vector<char> cs) {
@@ -299,8 +339,7 @@ vector<char> filterVector(std::vector<char> const& v,
   vector<char> filtered = v;
 
   std::vector<size_t> seenCounts(9, 0);
-
-  std::vector<size_t> seenIndexes(9, -1);
+  std::vector<size_t> seenIndexes(9, 9);
 
   size_t i = 0;
   for (char c : filtered) {
@@ -321,17 +360,12 @@ vector<char> filterVector(std::vector<char> const& v,
     if (count == 1) {
       int seenIndex = seenIndexes[c - '1'];
 
-      std::cout << "char: " << c << ", index: " << seenIndex << std::endl;
-
       filtered[seenIndex] = c;
-      //allowed[seenIndex]->clear();
-      //allowed[seenIndex]->insert(c);
+      copySet(allowed[seenIndex], std::set<char>{c});
     }
 
     c += 1;
   }
-
-  //std::cout << "filtered: " << filtered << std::endl;
 
   return filtered;
 }
@@ -345,7 +379,7 @@ map2d<size_t, std::set<char>*> initAllowed(matrix<char> const& board) {
     size_t j = 0;
     for (char c : row) {
       if (c == '.') {
-        allowed[i][j] = new std::set<char>{'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+        allowed[i][j] = new CHARSET_ONE2NINE;
       }
 
       j += 1;
@@ -366,22 +400,29 @@ void setAllowed(map2d<size_t, std::set<char>*>& allowed,
 
     for (std::pair<size_t, std::set<char>*> allowedSq : allowedSqs) {
       size_t x = allowedSq.first;
+      std::set<char>* allowedHere = allowedSq.second; 
+
+      char c = board[y][x];
 
       // while set is not erased, 
       // this prevents the loop from repeating squares 
-      if (board[y][x] == '.') {
+      if (c == '.') {
+	      copySet(allowedHere, CHARSET_ONE2NINE);
+
         int yBlock = y / 3;
         int xBlock = x / 3;
-        std::set<char>* allowedHere = allowedSq.second; 
 
-        *allowedHere = notInVector(*allowedHere, board[y]);
-        *allowedHere = notInVector(*allowedHere, vectorFromCol(board, x));
-        *allowedHere = notInVector(*allowedHere, vectorFromBlock(board, yBlock, xBlock));
+        copySet(allowedHere, notInVector(*allowedHere, vectorFromRow(board, y)));
+        copySet(allowedHere, notInVector(*allowedHere, vectorFromCol(board, x)));
+        copySet(allowedHere, notInVector(*allowedHere, vectorFromBlock(board, yBlock, xBlock)));
 
         if (allowedHere->size() == 1) {
           board[y][x] = *allowedHere->begin();
           // erase mapped set 
         }
+      } 
+      else if (allowedHere->size() > 1) {
+        copySet(allowedHere, std::set<char>{c});
       }
     }
   }
@@ -389,100 +430,104 @@ void setAllowed(map2d<size_t, std::set<char>*>& allowed,
 
 void filterBoard(matrix<char>& board,
     map2d<size_t, std::set<char>*>& allowed) {
-  // iterate over rows and columns
+  // iterate over rows, columns and blocks
   for (size_t i = 0; i < 9; i += 1) {
-
     vector<char> row = vectorFromRow(board, i);
     if (!isComplete(row)) {
+      setAllowed(allowed, board);
+
       std::map<size_t, std::set<char>*> allowedRow = mapFromRow(allowed, i);
       std::vector<char> filtered = filterVector(row, allowedRow);
 
-      rowFromVector(board, filtered, i);
+      if (filtered != row) {
+        rowFromVector(board, filtered, i);
+      }
+
+      if (!validateBoard(board)) break;
     }
 
     vector<char> col = vectorFromCol(board, i);
     if (!isComplete(col)) {
+      setAllowed(allowed, board);
+
+
       std::map<size_t, std::set<char>*> allowedCol = mapFromCol(allowed, i);
       vector<char> filtered = filterVector(col, allowedCol);
 
-      colFromVector(board, filtered, i);
+      if (filtered != col) {
+        colFromVector(board, filtered, i);
+      }
+
+      if (!validateBoard(board)) break;
     }
 
     vector<char> block = vectorFromBlock(board, i);
     if (!isComplete(block)) {
+      setAllowed(allowed, board);
+
       std::map<size_t, std::set<char>*> allowedBlock = mapFromBlock(allowed, i);
       vector<char> filtered = filterVector(block, allowedBlock);
 
-      blockFromVector(board, filtered, i);
+      if (filtered != block) {
+        blockFromVector(board, filtered, i);
+      }
+
+      if (!validateBoard(board)) break;
     }
   }
 }
 
 bool validateBoard(matrix<char> const& board) {
-  std::set<char> complete{'1', '2', '3', '4', '5', '6', '7', '8', '9'};
-
   // iterate over rows, columns and blocks
   for (int i = 0; i < 9; i += 1) {
-    vector<char> row = board[i];
-    if (isComplete(row)) {
-      std::set<char> filtered = notInVector(complete, row);
-
-      if (filtered.size() != countEmpty(row)) return false;
-    } 
-    //else return false;
+    vector<char> row = vectorFromRow(board, i);
+    if (!isVectorSet(row, '.')) {
+      return false;
+    }
 
     vector<char> col = vectorFromCol(board, i);
-    if (isComplete(col)) {
-      std::set<char> filtered = notInVector(complete, col);
-
-      if (filtered.size() != countEmpty(col)) return false;
+    if (!isVectorSet(col, '.')) {
+      return false;
     }
-    //else return false;
 
     vector<char> block = vectorFromBlock(board, i);
-    if (isComplete(block)) {
-      std::set<char> filtered = notInVector(complete, col);
-
-      if (filtered.size() != countEmpty(block)) return false;
-    } 
-    //else return false;
+    if (!isVectorSet(block, '.')) {
+      return false;
+    }
   }
 
   return true;
 }
 
+size_t solveBoard(matrix<char>& board, 
+    map2d<size_t, std::set<char>*>& allowed, size_t nruns) {
+  size_t nempty = countEmpty(board);
+  
+  //setAllowed(allowed, board);
+  filterBoard(board, allowed);
+
+  if (validateBoard(board) && countEmpty(board) < nempty)
+    nruns = solveBoard(board, allowed, nruns + 1);
+    
+  return nruns;
+}
+
 bool solveBoard(matrix<char> &board) {
   map2d<size_t, std::set<char>*> allowed = initAllowed(board);
 
-  setAllowed(allowed, board);
+  size_t nruns = 0;
+  size_t nempty = 81;
 
-  int maxRuns = 81;
-  int nruns = 1;
+  if (validateBoard(board) && countEmpty(board) < nempty) 
+     nruns = solveBoard(board, allowed, nruns);
 
-  //bool changedAnyOrFirst = true;
-  while (countEmpty(board) > 0 
-      //&& validateBoard(board)
-      //&& changedAnyOrFirst 
-      && nruns < maxRuns) {
-    //changedAnyOrFirst = false;
-    
-    //filterBoard(board, allowed);
+  std::cout << "ran " << nruns + 1 << " times" << std::endl;
 
-    setAllowed(allowed, board);
-
-    nruns += 1;
-  }
-
-  std::cout << allowed << std::endl;
-
-  std::cout << "ran " << nruns << " times" << std::endl;
-
-  //return countEmpty(board) == 0;
-  return validateBoard(board);
+  // valid and complete
+  return validateBoard(board) && isComplete(board);
 }
 
 void printBoard(matrix<char> const& board) {
-
   for (int i : vector<int>{0, 1, 2}) {
     int yMin = i * 3, yMax = (i + 1) * 3;
     std::for_each(board.begin() + yMin, board.begin() + yMax, 
@@ -512,16 +557,14 @@ int main() {
   //std::cout << board << std::endl;
   printBoard(board);
 
-  bool ok = solveBoard(board);
+  bool solved = solveBoard(board);
 
-  if (ok && countEmpty(board) == 0) std::cout << "board was solved";
+  if (solved) std::cout << "board was solved" << std::endl;
   else {
     std::cout << "board was not solved" << std::endl;
-    if (ok) std::cout << "board is in a valid state" << std::endl;
+    if (validateBoard(board)) std::cout << "board is in a valid state" << std::endl;
     else std::cout << "board is not in a valid state" << std::endl;
   }
-
-  std::cout << std::endl;
 
   printBoard(board);
 
